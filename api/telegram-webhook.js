@@ -20,11 +20,15 @@ function formatOrder(order) {
   ].join('\n');
 }
 
-async function sendTelegramMessage(token, chatId, text) {
+async function sendTelegramMessage(token, chatId, text, replyMarkup) {
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text })
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {})
+    })
   });
   const result = await response.json();
   if (!response.ok || !result.ok) {
@@ -62,6 +66,15 @@ export default async function handler(req, res) {
     const text = message.text.trim();
     const command = text.split(/\s+/, 1)[0];
     const buttonText = text.replace(/^📦\s*/, '').toLowerCase();
+    if (/^\/start(?:@[a-zA-Z0-9_]+)?$/i.test(command)) {
+      await sendTelegramMessage(token, chatId, 'Вітаємо у ВольтЗапас! Оберіть потрібну дію в меню нижче:', {
+        keyboard: [[{ text: '📦 Мої замовлення' }]],
+        resize_keyboard: true,
+        is_persistent: true
+      });
+      return res.status(200).json({ ok: true });
+    }
+
     if (!/^\/orders(?:@[a-zA-Z0-9_]+)?$/i.test(command) && buttonText !== 'мої замовлення') {
       return res.status(200).json({ ok: true });
     }
