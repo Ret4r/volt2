@@ -467,12 +467,16 @@
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label for="coName" class="block text-xs font-semibold text-slate-400 mb-0.5">Ім&apos;я *</label>
-            <input id="coName" type="text" autocomplete="name" class="field !py-1.5 !px-2.5" placeholder="Ваше ім'я" oninput="updateCart()">
+            <input id="coName" type="text" autocomplete="given-name" class="field !py-1.5 !px-2.5" placeholder="Ваше ім'я" oninput="updateCart()">
           </div>
           <div>
-            <label for="coPhone" class="block text-xs font-semibold text-slate-400 mb-0.5">Телефон *</label>
-            <input id="coPhone" type="tel" autocomplete="tel" inputmode="tel" class="field !py-1.5 !px-2.5" placeholder="+380" oninput="updateCart()">
+            <label for="coSurname" class="block text-xs font-semibold text-slate-400 mb-0.5">Прізвище *</label>
+            <input id="coSurname" type="text" autocomplete="family-name" class="field !py-1.5 !px-2.5" placeholder="Ваше прізвище" oninput="updateCart()">
           </div>
+        </div>
+        <div>
+          <label for="coPhone" class="block text-xs font-semibold text-slate-400 mb-0.5">Телефон *</label>
+          <input id="coPhone" type="tel" autocomplete="tel" inputmode="tel" class="field !py-1.5 !px-2.5" placeholder="+380" oninput="updateCart()">
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
@@ -1389,20 +1393,23 @@
 
     function checkoutMessage(lines, total) {
       const name = document.getElementById('coName').value.trim();
+      const surname = document.getElementById('coSurname').value.trim();
       const phone = document.getElementById('coPhone').value.trim();
       const city = document.getElementById('coCity').value.trim();
       const branch = document.getElementById('coBranch').value.trim();
       const comment = document.getElementById('coComment').value.trim();
       const items = lines.map(l => `• ${l.p.name} — ${l.qty} шт. × ${money(l.p.price)}`).join('\n');
-      return `Вітаю! Хочу оформити замовлення:\n${items}\nСума: ${money(total)}\n\nІм'я: ${name}\nТелефон: ${phone}${city ? `\nМісто: ${city}` : ''}${branch ? `\nВідділення: ${branch}` : ''}${comment ? `\nКоментар: ${comment}` : ''}`;
+      return `Вітаю! Хочу оформити замовлення:\n${items}\nСума: ${money(total)}\n\nІм'я: ${name}\nПрізвище: ${surname}\nТелефон: ${phone}${city ? `\nМісто: ${city}` : ''}${branch ? `\nВідділення: ${branch}` : ''}${comment ? `\nКоментар: ${comment}` : ''}`;
     }
 
     async function submitCheckout(openTelegram = true) {
       const lines = cartLines();
       if (!lines.length) { toast('Кошик порожній'); return false; }
       const name = document.getElementById('coName').value.trim();
+      const surname = document.getElementById('coSurname').value.trim();
       const phone = document.getElementById('coPhone').value.trim();
       if (!name) { toast("Вкажіть ім'я"); document.getElementById('coName').focus(); return false; }
+      if (!surname) { toast('Вкажіть прізвище'); document.getElementById('coSurname').focus(); return false; }
       if (!validPhone(phone)) { toast('Вкажіть коректний номер телефону'); document.getElementById('coPhone').focus(); return false; }
       const total = lines.reduce((s, l) => s + l.p.price * l.qty, 0);
       const msg = checkoutMessage(lines, total);
@@ -1414,7 +1421,7 @@
         const order = await apiRequest('/api/orders', {
           method: 'POST',
           body: JSON.stringify({
-            customer_name: name,
+            customer_name: `${name} ${surname}`,
             phone,
             delivery_city: city,
             delivery_branch: branch,
@@ -1429,7 +1436,7 @@
           })
         });
         cart = [];
-        ['coName', 'coPhone', 'coCity', 'coBranch', 'coComment'].forEach(id => {
+        ['coName', 'coSurname', 'coPhone', 'coCity', 'coBranch', 'coComment'].forEach(id => {
           document.getElementById(id).value = '';
         });
         updateCart();
