@@ -564,9 +564,10 @@
           <p class="text-xs text-emerald-400"><i class="fa-solid fa-money-bill-wave mr-1" aria-hidden="true"></i> Оплата післяплатою у відділенні пошти</p>
         </div>
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
         <button id="detailBuyButton" type="button" onclick="buyDetailProduct()" class="keep-white hidden py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl hover:opacity-90 transition"><i class="fa-solid fa-cart-plus mr-1.5" aria-hidden="true"></i> Купити зараз</button>
         <button id="detailPreorderButton" type="button" onclick="preorderDetailProduct()" class="py-3 border border-amber-500/40 text-amber-400 font-semibold rounded-xl hover:bg-amber-500/10 transition"><i class="fa-regular fa-clock mr-1.5" aria-hidden="true"></i> <span id="detailPreorderLabel">Під замовлення</span></button>
+        <button id="detailShareButton" type="button" onclick="shareProduct(detailProductId)" class="py-3 border border-slate-700 text-slate-300 font-semibold rounded-xl hover:border-cyan-500 hover:text-cyan-400 transition"><i class="fa-solid fa-share-nodes mr-1.5" aria-hidden="true"></i> Поділитися</button>
       </div>
     </div>
   </div>
@@ -814,6 +815,38 @@
     const tgUrl = text => `https://t.me/${encodeURIComponent(settings.telegram)}${text ? '?text=' + encodeURIComponent(text) : ''}`;
     const orderNumberLabel = value => String(value ?? '').padStart(6, '0');
 
+    async function shareProduct(id) {
+      const product = products.find(item => item.id === id);
+      if (!product) return;
+
+      const url = new URL(window.location.href);
+      url.searchParams.set('product', String(product.id));
+      const shareUrl = url.toString();
+      const shareData = {
+        title: product.name,
+        text: `${product.name} — ${money(product.stock ? product.price : preOf(product))}`,
+        url: shareUrl
+      };
+
+      if (navigator.share) {
+        try {
+          await navigator.share(shareData);
+          return;
+        } catch (error) {
+          if (error && error.name === 'AbortError') return;
+          console.error('Native product sharing failed', error);
+        }
+      }
+
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        toast('Посилання на товар скопійовано');
+      } catch (error) {
+        console.error('Copying product link failed', error);
+        toast('Не вдалося поділитися товаром');
+      }
+    }
+
     function orderContactLinks(order, items) {
       const rawPhone = String(order.phone || '').replace(/\D/g, '');
       const phone = rawPhone.length === 10 && rawPhone.startsWith('0') ? `38${rawPhone}` : rawPhone;
@@ -913,6 +946,9 @@
         applySettings();
         renderProducts();
         updateCart();
+        const sharedProductId = new URLSearchParams(window.location.search).get('product');
+        const sharedProduct = products.find(product => String(product.id) === sharedProductId);
+        if (sharedProduct) openProductDetails(sharedProduct.id);
       } catch (error) {
         document.getElementById('emptyState').textContent = `Не вдалося завантажити каталог: ${error.message}`;
         document.getElementById('emptyState').classList.remove('hidden');
@@ -1015,7 +1051,10 @@
               <span class="text-slate-300"><i class="fa-regular fa-clock text-amber-400 mr-1" aria-hidden="true"></i>Під замовлення ${esc(p.wait || '≈ 3 тижні')}</span>
               ${p.stock && save > 0 ? `<b class="text-emerald-400 shrink-0">−${money(save)}</b>` : ''}
             </div>
-            <div class="flex flex-col gap-2">${buttons}</div>
+            <div class="flex flex-col gap-2">
+              ${buttons}
+              <button type="button" onclick="shareProduct(${p.id})" class="w-full py-2.5 border border-slate-700 text-slate-300 hover:border-cyan-500 hover:text-cyan-400 font-semibold rounded-xl transition text-sm"><i class="fa-solid fa-share-nodes mr-1.5" aria-hidden="true"></i>Поділитися</button>
+            </div>
           </div>
         </article>`;
       }).join('');
