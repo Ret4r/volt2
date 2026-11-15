@@ -1113,10 +1113,10 @@
           ${order.delivery_info ? `<p class="text-slate-400 text-xs mt-1 whitespace-pre-line">${esc(order.delivery_info)}</p>` : ''}
           <div class="flex flex-wrap items-center gap-2 mt-3">
             <label class="text-xs text-slate-400" for="orderStatus-${esc(order.id)}">Статус</label>
-            <select id="orderStatus-${esc(order.id)}" class="field !w-auto !py-1.5" onchange="changeOrderStatus(${Number(order.id)}, this.value)">
+            <select id="orderStatus-${esc(order.id)}" class="field !w-auto !py-1.5" onchange="changeOrderStatus('${esc(order.id)}', this.value)">
               ${Object.entries(statusNames).map(([value, label]) => `<option value="${value}" ${status === value ? 'selected' : ''}>${label}</option>`).join('')}
             </select>
-            <button onclick="deleteOrder(${Number(order.id)})" class="ml-auto px-3 py-2 rounded-lg text-red-400 hover:bg-slate-800 text-xs" aria-label="Видалити замовлення"><i class="fa-solid fa-trash" aria-hidden="true"></i> Видалити</button>
+            <button onclick="deleteOrder('${esc(order.id)}')" class="ml-auto px-3 py-2 rounded-lg text-red-400 hover:bg-slate-800 text-xs" aria-label="Видалити замовлення"><i class="fa-solid fa-trash" aria-hidden="true"></i> Видалити</button>
           </div>
         </article>`;
       }).join('') || '<p class="text-slate-400 text-sm py-6 text-center">Замовлень поки немає</p>';
@@ -1125,7 +1125,7 @@
     async function changeOrderStatus(id, status) {
       try {
         await adminRequest('/api/orders', { method: 'PUT', body: JSON.stringify({ id, status }) });
-        const order = orders.find(item => Number(item.id) === id);
+        const order = orders.find(item => String(item.id) === String(id));
         if (order) order.status = status;
         renderAdminOrders();
         toast('Статус замовлення оновлено');
@@ -1139,7 +1139,7 @@
       confirmAction('Видалити це замовлення?', async () => {
         try {
           await adminRequest(`/api/orders?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-          orders = orders.filter(order => Number(order.id) !== id);
+          orders = orders.filter(order => String(order.id) !== String(id));
           renderAdminOrders();
           toast('Замовлення видалено');
         } catch (error) {
