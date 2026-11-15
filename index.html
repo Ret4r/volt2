@@ -821,9 +821,11 @@
       const itemList = items.map(item =>
         `• ${item.name || item.title || 'Товар'} × ${Number(item.qty || item.quantity || 1)}`
       ).join('\n') || 'Немає даних';
+      const customerName = String(order.customer_name || 'Не вказано').replace(/[\r\n\t]+/g, ' ').slice(0, 100);
       const address = String(order.delivery_info || 'Не вказана').replace(/[\r\n\t]+/g, ' ');
       const message = [
         `Добрий день! Пишу щодо замовлення №${orderNumberLabel(order.order_number)}.`,
+        `Клієнт: ${customerName}`,
         '',
         'Товари:',
         itemList,
