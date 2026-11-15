@@ -1,19 +1,60 @@
 import { neon } from '@neondatabase/serverless';
 
-const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
+const getSql = () => {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is not configured');
+  }
+  return neon(process.env.DATABASE_URL);
+};
 
 function setNoStore(res) {
   res.setHeader('Cache-Control', 'no-store');
 }
 
+async function notifyTelegram(order) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
+    console.warn('Telegram order notification skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not configured');
+    return;
+  }
+
+  const items = Array.isArray(order.items) ? order.items : [];
+  const itemsList = items.map(item => {
+    const name = item.name || item.title || 'Товар';
+    const quantity = Number(item.qty || item.quantity || 1);
+    const price = Number(item.price || 0);
+    return `• ${name} (×${quantity}) — ${price} грн`;
+  }).join('\n') || 'Немає даних про товари';
+  const message = [
+    'Нове замовлення на ВольтЗапас!',
+    '',
+    `Клієнт: ${order.customer_name || ''}`,
+    `Телефон: ${order.phone || ''}`,
+    `Доставка: ${order.delivery_info || ''}`,
+    '',
+    'Товари:',
+    itemsList,
+    '',
+    `Сума: ${order.total_price} грн`
+  ].join('\n');
+
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text: message })
+  });
+  const result = await response.json();
+  if (!response.ok || !result.ok) {
+    throw new Error(`Telegram API rejected order notification: ${result.description || response.statusText}`);
+  }
+}
+
 export default async function handler(req, res) {
   setNoStore(res);
 
-  if (!sql) {
-    return res.status(503).json({ error: 'DATABASE_URL is not configured' });
-  }
-
   try {
+    const sql = getSql();
     const body = req.body && typeof req.body === 'object' ? req.body : typeof req.body === 'string' ? JSON.parse(req.body || '{}') : {};
     const adminPassword = process.env.ADMIN_PASSWORD;
     const isAdmin = Boolean(adminPassword) && req.headers['x-admin-password'] === adminPassword;
@@ -41,6 +82,11 @@ export default async function handler(req, res) {
         VALUES (${customer_name}, ${phone}, ${orderInfo}, ${JSON.stringify(items)}, ${total_price})
         RETURNING *
       `;
+      try {
+        await notifyTelegram({ ...order, items });
+      } catch (error) {
+        console.error('Telegram order notification failed', error);
+      }
       return res.status(201).json(order);
     }
 
@@ -69,6 +115,10 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'GET, POST, PUT, DELETE');
     return res.status(405).json({ error: 'Метод не підтримується' });
   } catch (error) {
+    const message = error && error.message ? error.message : 'Unknown error';
+    if (/DATABASE_URL is not configured|relation .* does not exist|column .* does not exist/i.test(message)) {
+      return res.status(503).json({ error: 'База даних не налаштована. Виконайте SQL із database/schema.sql у Neon.' });
+    }
     console.error('Orders API failed', error);
     return res.status(500).json({ error: 'Внутрішня помилка сервера' });
   }
