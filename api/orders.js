@@ -15,6 +15,10 @@ function isUuid(value) {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
+function formatOrderNumber(value) {
+  return String(value).padStart(6, '0');
+}
+
 async function notifyTelegram(order) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -31,7 +35,7 @@ async function notifyTelegram(order) {
     return `• ${name} (×${quantity}) — ${price} грн`;
   }).join('\n') || 'Немає даних про товари';
   const message = [
-    'Нове замовлення на ВольтЗапас!',
+    `Нове замовлення #${formatOrderNumber(order.order_number)} на ВольтЗапас!`,
     '',
     `👤Клієнт: ${order.customer_name || ''}`,
     `📱Телефон: ${order.phone || ''}`,
@@ -96,7 +100,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       if (!isAdmin) return res.status(401).json({ error: 'Доступ лише для адміністратора' });
-      const orders = await sql`SELECT * FROM orders ORDER BY id DESC`;
+      const orders = await sql`SELECT * FROM orders ORDER BY created_at DESC, order_number DESC`;
       return res.status(200).json(orders);
     }
 
