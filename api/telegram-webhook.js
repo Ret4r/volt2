@@ -61,7 +61,8 @@ export default async function handler(req, res) {
 
     const text = message.text.trim();
     const command = text.split(/\s+/, 1)[0];
-    if (!/^\/orders(?:@[a-zA-Z0-9_]+)?$/i.test(command) && text.toLowerCase() !== 'мої замовлення') {
+    const buttonText = text.replace(/^📦\s*/, '').toLowerCase();
+    if (!/^\/orders(?:@[a-zA-Z0-9_]+)?$/i.test(command) && buttonText !== 'мої замовлення') {
       return res.status(200).json({ ok: true });
     }
 
