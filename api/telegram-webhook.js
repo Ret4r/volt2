@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 1;
 const MAX_PAGE = 999;
 const STATUS_NAMES = {
   new: 'Нове',
@@ -9,6 +9,13 @@ const STATUS_NAMES = {
   completed: 'Завершено',
   cancelled: 'Скасовано'
 };
+const STATUS_BUTTONS = [
+  { value: 'new', text: 'Нове' },
+  { value: 'processing', text: 'Обробка' },
+  { value: 'shipped', text: 'Відправлено' },
+  { value: 'completed', text: 'Завершено' },
+  { value: 'cancelled', text: 'Скасовано' }
+];
 
 function getBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
@@ -91,7 +98,7 @@ async function getOrdersPage(sql, scope, page) {
 
 async function showOrdersPage(token, chatId, sql, scope, page, editTarget) {
   let orders = await getOrdersPage(sql, scope, page);
-  if (orders.length === 0 && page > 0) {
+  while (orders.length === 0 && page > 0) {
     page -= 1;
     orders = await getOrdersPage(sql, scope, page);
   }
@@ -105,12 +112,25 @@ async function showOrdersPage(token, chatId, sql, scope, page, editTarget) {
       ? 'Архів порожній.'
       : 'Поки що немає жодного замовлення в базі.';
 
-  const inlineKeyboard = visibleOrders
-    .filter(order => order.status === 'completed')
-    .map(order => [{
-      text: `🗑 Видалити #${formatOrderNumber(order.order_number)}`,
-      callback_data: `d|${order.id}|${scopeCode(scope)}|${page}`
-    }]);
+  const inlineKeyboard = [];
+  for (const order of visibleOrders) {
+    if (order.status === 'completed') {
+      inlineKeyboard.push([{
+        text: `🗑 Видалити #${formatOrderNumber(order.order_number)}`,
+        callback_data: `d|${order.id}|${scopeCode(scope)}|${page}`
+      }]);
+    }
+    inlineKeyboard.push(
+      STATUS_BUTTONS.slice(0, 3).map(status => ({
+        text: `${order.status === status.value ? '✓ ' : ''}${status.text}`,
+        callback_data: `s|${order.id}|${status.value}|${scopeCode(scope)}|${page}`
+      })),
+      STATUS_BUTTONS.slice(3).map(status => ({
+        text: `${order.status === status.value ? '✓ ' : ''}${status.text}`,
+        callback_data: `s|${order.id}|${status.value}|${scopeCode(scope)}|${page}`
+      }))
+    );
+  }
   const pageControls = [];
   if (page > 0) pageControls.push({ text: '⬅️ Назад', callback_data: `p|${scopeCode(scope)}|${page - 1}` });
   if (hasNext) pageControls.push({ text: 'Далі ➡️', callback_data: `p|${scopeCode(scope)}|${page + 1}` });
@@ -150,6 +170,27 @@ async function handleCallback(token, sql, callbackQuery) {
     }
     await showOrdersPage(token, message.chat.id, sql, scope, page, editTarget);
     await answerCallback(token, callbackQuery.id);
+    return;
+  }
+
+  if (data[0] === 's' && isUuid(data[1])) {
+    const status = data[2];
+    const scope = scopeFromCode(data[3]);
+    const page = Number(data[4]);
+    if (!Object.prototype.hasOwnProperty.call(STATUS_NAMES, status) ||
+      !scope || !Number.isInteger(page) || page < 0 || page > MAX_PAGE) {
+      await answerCallback(token, callbackQuery.id, 'Невірна команда');
+      return;
+    }
+    const updated = await sql`
+      UPDATE orders SET status = ${status}
+      WHERE id = ${data[1]}
+      RETURNING order_number
+    `;
+    await answerCallback(token, callbackQuery.id, updated.length
+      ? `Статус: ${STATUS_NAMES[status]}`
+      : 'Замовлення не знайдено');
+    await showOrdersPage(token, message.chat.id, sql, scope, page, editTarget);
     return;
   }
 

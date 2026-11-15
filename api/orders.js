@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import { randomInt } from 'node:crypto';
 
 const getSql = () => {
   if (!process.env.DATABASE_URL) {
@@ -17,6 +18,20 @@ function isUuid(value) {
 
 function formatOrderNumber(value) {
   return String(value).padStart(6, '0');
+}
+
+async function insertOrder(sql, { customer_name, phone, delivery_info, items, total_price }) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const orderNumber = randomInt(100000, 1000000);
+    const [order] = await sql`
+      INSERT INTO orders (order_number, customer_name, phone, delivery_info, items, total_price)
+      VALUES (${orderNumber}, ${customer_name}, ${phone}, ${delivery_info}, ${JSON.stringify(items)}, ${total_price})
+      ON CONFLICT (order_number) DO NOTHING
+      RETURNING *
+    `;
+    if (order) return order;
+  }
+  throw new Error('Unable to allocate a unique six-digit order number');
 }
 
 async function notifyTelegram(order) {
@@ -85,11 +100,13 @@ export default async function handler(req, res) {
         orderComment ? `Коментар: ${orderComment}` : ''
       ].filter(Boolean).join('\n');
 
-      const [order] = await sql`
-        INSERT INTO orders (customer_name, phone, delivery_info, items, total_price)
-        VALUES (${customer_name}, ${phone}, ${orderInfo}, ${JSON.stringify(items)}, ${total_price})
-        RETURNING *
-      `;
+      const order = await insertOrder(sql, {
+        customer_name,
+        phone,
+        delivery_info: orderInfo,
+        items,
+        total_price
+      });
       try {
         await notifyTelegram({ ...order, items });
       } catch (error) {
