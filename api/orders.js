@@ -11,6 +11,10 @@ function setNoStore(res) {
   res.setHeader('Cache-Control', 'no-store');
 }
 
+function isUuid(value) {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 async function notifyTelegram(order) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -100,6 +104,9 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
       const { id, status } = body || {};
+      if (!isUuid(id)) {
+        return res.status(400).json({ error: 'Невірний ID замовлення' });
+      }
       if (!['new', 'processing', 'shipped', 'completed', 'cancelled'].includes(status)) {
         return res.status(400).json({ error: 'Невідомий статус замовлення' });
       }
@@ -108,7 +115,11 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      await sql`DELETE FROM orders WHERE id = ${req.query.id}`;
+      const { id } = req.query;
+      if (!isUuid(id)) {
+        return res.status(400).json({ error: 'Невірний ID замовлення' });
+      }
+      await sql`DELETE FROM orders WHERE id = ${id}`;
       return res.status(200).json({ deleted: true });
     }
 
