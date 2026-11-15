@@ -29,14 +29,14 @@ async function notifyTelegram(order) {
   const message = [
     'Нове замовлення на ВольтЗапас!',
     '',
-    `Клієнт: ${order.customer_name || ''}`,
-    `Телефон: ${order.phone || ''}`,
-    `Доставка: ${order.delivery_info || ''}`,
+    `👤Клієнт: ${order.customer_name || ''}`,
+    `📱Телефон: ${order.phone || ''}`,
+    `🚘Доставка: ${order.delivery_info || ''}`,
     '',
-    'Товари:',
+    '🗂️Товари:',
     itemsList,
     '',
-    `Сума: ${order.total_price} грн`
+    `💰Сума: ${order.total_price} грн`
   ].join('\n');
 
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
