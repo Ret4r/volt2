@@ -281,6 +281,7 @@
       <button onclick="setAdminTab('requests')" data-atab="requests" class="atab-btn px-4 py-2 rounded-xl border text-sm font-semibold transition whitespace-nowrap"><i class="fa-solid fa-inbox mr-1.5" aria-hidden="true"></i>Заявки <span id="reqBadge" class="keep-white hidden ml-1 px-1.5 py-0.5 rounded-md bg-red-500 text-white text-[10px]">0</span></button>
       <button onclick="setAdminTab('products')" data-atab="products" class="atab-btn px-4 py-2 rounded-xl border text-sm font-semibold transition whitespace-nowrap"><i class="fa-solid fa-boxes-stacked mr-1.5" aria-hidden="true"></i>Товари</button>
       <button onclick="setAdminTab('orders')" data-atab="orders" class="atab-btn px-4 py-2 rounded-xl border text-sm font-semibold transition whitespace-nowrap"><i class="fa-solid fa-receipt mr-1.5" aria-hidden="true"></i>Замовлення <span id="orderBadge" class="keep-white hidden ml-1 px-1.5 py-0.5 rounded-md bg-red-500 text-white text-[10px]">0</span></button>
+      <button onclick="setAdminTab('archive')" data-atab="archive" class="atab-btn px-4 py-2 rounded-xl border text-sm font-semibold transition whitespace-nowrap"><i class="fa-solid fa-box-archive mr-1.5" aria-hidden="true"></i>Архів <span id="archiveBadge" class="keep-white hidden ml-1 px-1.5 py-0.5 rounded-md bg-slate-600 text-white text-[10px]">0</span></button>
       <button onclick="setAdminTab('site')" data-atab="site" class="atab-btn px-4 py-2 rounded-xl border text-sm font-semibold transition whitespace-nowrap"><i class="fa-solid fa-pen-ruler mr-1.5" aria-hidden="true"></i>Сайт</button>
       <button onclick="setAdminTab('reviews')" data-atab="reviews" class="atab-btn px-4 py-2 rounded-xl border text-sm font-semibold transition whitespace-nowrap"><i class="fa-solid fa-comments mr-1.5" aria-hidden="true"></i>Відгуки</button>
     </div>
@@ -301,6 +302,15 @@
         <button onclick="loadAdminOrders()" class="text-xs text-slate-400 hover:text-cyan-400"><i class="fa-solid fa-rotate mr-1" aria-hidden="true"></i>Оновити</button>
       </div>
       <div id="adminOrders" class="space-y-3"></div>
+    </div>
+
+    <!-- Completed orders archive -->
+    <div id="atab-archive" class="atab hidden glass p-4 sm:p-6 rounded-2xl">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <h3 class="text-lg font-bold text-white">Архів завершених замовлень</h3>
+        <button onclick="loadAdminOrders()" class="text-xs text-slate-400 hover:text-cyan-400"><i class="fa-solid fa-rotate mr-1" aria-hidden="true"></i>Оновити</button>
+      </div>
+      <div id="adminOrderArchive" class="space-y-3"></div>
     </div>
 
     <!-- Products tab -->
@@ -802,6 +812,30 @@
     const unitOf = cat => cat === 'ups' ? 'ВА' : 'мАг';
     const catLabel = cat => cat === 'ups' ? 'ДБЖ' : 'Павербанк';
     const tgUrl = text => `https://t.me/${encodeURIComponent(settings.telegram)}${text ? '?text=' + encodeURIComponent(text) : ''}`;
+    const orderNumberLabel = value => String(value ?? '').padStart(6, '0');
+
+    function orderContactLinks(order, items) {
+      const rawPhone = String(order.phone || '').replace(/\D/g, '');
+      const phone = rawPhone.length === 10 && rawPhone.startsWith('0') ? `38${rawPhone}` : rawPhone;
+      if (phone.length < 10) return '';
+      const itemList = items.map(item =>
+        `• ${item.name || item.title || 'Товар'} × ${Number(item.qty || item.quantity || 1)}`
+      ).join('\n') || 'Немає даних';
+      const address = String(order.delivery_info || 'Не вказана').replace(/[\r\n\t]+/g, ' ');
+      const message = [
+        `Добрий день! Пишу щодо замовлення №${orderNumberLabel(order.order_number)}.`,
+        '',
+        'Товари:',
+        itemList,
+        `Адреса доставки: ${address}`
+      ].join('\n');
+      const encodedMessage = encodeURIComponent(message);
+      const telegramUrl = `https://t.me/+${phone}?text=${encodedMessage}`;
+      const viberUrl = `viber://chat?number=%2B${phone}&text=${encodedMessage}`;
+
+      return `<a href="${esc(telegramUrl)}" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-lg text-sky-400 hover:bg-slate-800 text-xs" aria-label="Написати клієнту в Telegram"><i class="fa-brands fa-telegram mr-1" aria-hidden="true"></i>Telegram</a>
+        <a href="${esc(viberUrl)}" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-lg text-violet-400 hover:bg-slate-800 text-xs" aria-label="Написати клієнту у Viber"><i class="fa-brands fa-viber mr-1" aria-hidden="true"></i>Viber</a>`;
+    }
 
     const ACTIVE = 'bg-cyan-500 border-cyan-400 text-white keep-white';
     const IDLE = 'border-slate-800 bg-slate-900 text-slate-400 hover:text-cyan-400';
@@ -826,7 +860,7 @@
     function openModal(id) { const m = document.getElementById(id); m.classList.remove('hidden'); m.classList.add('flex'); }
     function closeModal(id) { const m = document.getElementById(id); m.classList.add('hidden'); m.classList.remove('flex'); }
     function showOrderSuccess(orderNumber) {
-      document.getElementById('successOrderNumber').textContent = String(orderNumber);
+      document.getElementById('successOrderNumber').textContent = orderNumberLabel(orderNumber);
       openModal('orderSuccessModal');
     }
 
@@ -1080,20 +1114,34 @@
         orders = await adminRequest('/api/orders');
         renderAdminOrders();
       } catch (error) {
-        document.getElementById('adminOrders').innerHTML = `<p class="text-red-400 text-sm">Не вдалося завантажити замовлення: ${esc(error.message)}</p>`;
+        const errorMessage = `<p class="text-red-400 text-sm">Не вдалося завантажити замовлення: ${esc(error.message)}</p>`;
+        document.getElementById('adminOrders').innerHTML = errorMessage;
+        document.getElementById('adminOrderArchive').innerHTML = errorMessage;
       }
     }
 
     function renderAdminOrders() {
       const activeOrders = orders.filter(order => !['completed', 'cancelled'].includes(order.status));
+      const completedOrders = orders.filter(order => order.status === 'completed');
       const badge = document.getElementById('orderBadge');
       badge.textContent = activeOrders.length;
       badge.classList.toggle('hidden', activeOrders.length === 0);
-      document.getElementById('adminOrders').innerHTML = [...orders].map(order => {
+      const archiveBadge = document.getElementById('archiveBadge');
+      archiveBadge.textContent = completedOrders.length;
+      archiveBadge.classList.toggle('hidden', completedOrders.length === 0);
+      document.getElementById('adminOrders').innerHTML = renderAdminOrderCards(
+        orders.filter(order => order.status !== 'completed')
+      );
+      document.getElementById('adminOrderArchive').innerHTML = renderAdminOrderCards(completedOrders);
+    }
+
+    function renderAdminOrderCards(orderList) {
+      return [...orderList].map(order => {
         let items = order.items;
         if (typeof items === 'string') {
           try { items = JSON.parse(items); } catch { items = []; }
         }
+        if (!Array.isArray(items)) items = [];
         const itemText = Array.isArray(items)
           ? items.map(item => `${esc(item.name || item.title || 'Товар')} × ${Number(item.qty || item.quantity || 1)}${item.preorder || item.type === 'preorder' ? ' (передзамовлення)' : ''}`).join(', ')
           : esc(String(items || ''));
@@ -1103,7 +1151,7 @@
         return `<article class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p class="text-xs text-cyan-400 font-semibold">Замовлення №${esc(order.id)}</p>
+              <p class="text-xs text-cyan-400 font-semibold">Замовлення №${esc(orderNumberLabel(order.order_number))}</p>
               <p class="font-bold text-white">${esc(order.customer_name || 'Клієнт')} · ${esc(order.phone || '')}</p>
               <time class="text-xs text-slate-500">${date ? esc(new Date(date).toLocaleString('uk-UA')) : ''}</time>
             </div>
@@ -1116,6 +1164,7 @@
             <select id="orderStatus-${esc(order.id)}" class="field !w-auto !py-1.5" onchange="changeOrderStatus('${esc(order.id)}', this.value)">
               ${Object.entries(statusNames).map(([value, label]) => `<option value="${value}" ${status === value ? 'selected' : ''}>${label}</option>`).join('')}
             </select>
+            ${orderContactLinks(order, items)}
             <button onclick="deleteOrder('${esc(order.id)}')" class="ml-auto px-3 py-2 rounded-lg text-red-400 hover:bg-slate-800 text-xs" aria-label="Видалити замовлення"><i class="fa-solid fa-trash" aria-hidden="true"></i> Видалити</button>
           </div>
         </article>`;
@@ -1242,8 +1291,8 @@
         document.getElementById('preName').value = '';
         document.getElementById('prePhone').value = '';
         document.getElementById('preQty').value = 1;
-        if (chat) chat.location.href = tgUrl(res.msg);
-        showOrderSuccess(order.id);
+        if (chat) chat.location.href = tgUrl(`${res.msg}\n\nНомер замовлення: #${orderNumberLabel(order.order_number)}`);
+        showOrderSuccess(order.order_number);
       } catch (error) {
         if (chat) chat.close();
         toast(`Не вдалося зберегти передзамовлення: ${error.message}`);
@@ -1344,8 +1393,8 @@
         });
         updateCart();
         toggleCart(false);
-        if (chat) chat.location.href = tgUrl(msg);
-        showOrderSuccess(order.id);
+        if (chat) chat.location.href = tgUrl(`${msg}\n\nНомер замовлення: #${orderNumberLabel(order.order_number)}`);
+        showOrderSuccess(order.order_number);
       } catch (error) {
         if (chat) chat.close();
         toast(`Не вдалося оформити замовлення: ${error.message}`);
@@ -1456,7 +1505,7 @@
       document.querySelectorAll('.atab').forEach(t => t.classList.toggle('hidden', t.id !== 'atab-' + tab));
       if (tab === 'products') renderAdminTable();
       if (tab === 'requests') renderAdminRequests();
-      if (tab === 'orders') loadAdminOrders();
+      if (tab === 'orders' || tab === 'archive') loadAdminOrders();
       if (tab === 'reviews') renderAdminReviews();
       if (tab === 'site') fillSettingsForm();
     }
